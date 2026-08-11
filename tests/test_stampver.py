@@ -51,6 +51,17 @@ def test_ts_version_stamping(tmp_path):
     assert "export const BUILD_HASH" in content
 
 
+def test_ts_auto_creation(tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({"name": "auto-ts"}), encoding="utf-8")
+    (tmp_path / "src").mkdir()
+
+    res = stamp_workspace(str(tmp_path))
+    assert "src/version.ts" in [f.replace("\\", "/") for f in res.updated_files]
+    created_ts = (tmp_path / "src" / "version.ts").read_text(encoding="utf-8")
+    assert "export const VERSION" in created_ts
+
+
+
 
 def test_cli_version(capsys):
     import sys
