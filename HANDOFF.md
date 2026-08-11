@@ -42,3 +42,20 @@ python -m stampver.cli stamp --bump patch --stage --json
 # Install pre-commit hook into target repo
 python -m stampver.cli hook-install --dir /path/to/target/repo
 ```
+
+---
+
+## 🛠️ Project Structure
+
+```text
+stampver/
+├── .pre-commit-hooks.yaml  # Hook definitions for pre-commit framework
+├── pyproject.toml          # Hatchling package metadata
+├── README.md               # Documentation
+├── rust_core/              # Reserved for Rust engine port
+└── stampver/
+    ├── __init__.py         # Package entry & __version__
+    ├── cli.py              # CLI parser (-v, stamp, info, hook-install)
+    ├── core.py             # Version resolver, manifest updaters & hashing
+    └── hooks.py            # Pre-commit hook generator
+```

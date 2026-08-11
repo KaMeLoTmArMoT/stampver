@@ -1,0 +1,6 @@
+- id: stampver
+  name: stampver
+  description: Universal date-first versioning and build stamping CLI tool
+  entry: stampver stamp --stage
+  language: python
+  pass_filenames: false

@@ -36,3 +36,19 @@ def test_stamp_workspace(tmp_path):
     updated_pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
     assert updated_pkg["version"] == "1.1.0"
     assert "buildHash" in updated_pkg
+
+
+def test_cli_version(capsys):
+    import sys
+    from unittest.mock import patch
+
+    from stampver import __version__
+    from stampver.cli import main
+
+    with patch.object(sys, "argv", ["stampver", "-v"]):
+        try:
+            main()
+        except SystemExit as e:
+            assert e.code == 0
+    captured = capsys.readouterr()
+    assert __version__ in captured.out or __version__ in captured.err

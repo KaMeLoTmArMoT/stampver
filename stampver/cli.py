@@ -3,6 +3,7 @@ import json
 import os
 import sys
 
+from stampver import __version__
 from stampver.core import resolve_context, stamp_workspace
 from stampver.hooks import install_pre_commit_hook
 
@@ -11,6 +12,12 @@ def main():
     parser = argparse.ArgumentParser(
         prog="stampver",
         description="Universal date-first versioning and build stamping tool.",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")

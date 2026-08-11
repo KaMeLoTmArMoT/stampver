@@ -14,3 +14,11 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: stampver
+        name: stampver (self-stamping)
+        entry: uv run python -m stampver.cli stamp --stage
+        language: system
+        pass_filenames: false
