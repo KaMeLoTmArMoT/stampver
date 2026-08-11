@@ -42,6 +42,13 @@ def main():
         help="Automatically 'git add' updated files",
     )
     stamp_parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Preview files that would be updated without writing changes",
+    )
+    stamp_parser.add_argument(
         "--dir",
         default=".",
         help="Target project root directory (default: current directory)",
@@ -117,15 +124,18 @@ def main():
             print("=======================================")
 
     elif args.command == "stamp":
+        dry_run = getattr(args, "dry_run", False)
         result = stamp_workspace(
             root_dir=target_dir,
             bump=args.bump,
             salt=args.salt,
             stage=args.stage,
+            dry_run=dry_run,
         )
 
         data = {
-            "status": "success",
+            "status": "success" if not result.errors else "partial_success",
+            "dry_run": dry_run,
             "full_version": result.context.full_version,
             "semver": result.context.semver,
             "date": result.context.date_str,
@@ -133,19 +143,26 @@ def main():
             "build_hash": result.context.build_hash,
             "updated_files": result.updated_files,
             "staged_files": result.staged_files,
+            "errors": result.errors,
         }
 
         if getattr(args, "json_output", False):
             print(json.dumps(data, indent=2))
         else:
-            print(f"[stampver] Stamped version: {result.context.full_version}")
+            prefix = "[stampver] [DRY RUN]" if dry_run else "[stampver]"
+            print(f"{prefix} Stamped version: {result.context.full_version}")
             if result.updated_files:
-                print(" Updated files:")
+                header = " Files that would be updated:" if dry_run else " Updated files:"
+                print(header)
                 for f in result.updated_files:
                     staged_msg = " (git staged)" if f in result.staged_files else ""
                     print(f"   - {f}{staged_msg}")
             else:
                 print(" All version files are up to date.")
+            if result.errors:
+                print(" Errors encountered:")
+                for err in result.errors:
+                    print(f"   ! {err}", file=sys.stderr)
 
     elif args.command == "hook-install":
         success, message = install_pre_commit_hook(target_dir)
@@ -158,3 +175,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

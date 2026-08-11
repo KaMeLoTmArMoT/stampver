@@ -93,6 +93,9 @@ stampver info --json
 # Stamp current version & build hash:
 stampver stamp
 
+# Dry-run mode (preview updates without writing files):
+stampver stamp --dry-run
+
 # Stamp and bump SemVer (patch, minor, or major):
 stampver stamp --bump patch --stage
 ```
