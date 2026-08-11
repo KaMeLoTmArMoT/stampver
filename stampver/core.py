@@ -242,6 +242,24 @@ BUILD_HASH = "{ctx.build_hash}"
         if os.path.exists(py_path):
             _write_if_changed(py_path, build_info_content, updated_files)
 
+    # 6b. Update TypeScript version.ts / src/version.ts / buildInfo.ts
+    ts_info_paths = [
+        os.path.join(root_dir, "src", "version.ts"),
+        os.path.join(root_dir, "version.ts"),
+        os.path.join(root_dir, "src", "buildInfo.ts"),
+        os.path.join(root_dir, "buildInfo.ts"),
+    ]
+    ts_info_content = f"""// Auto-generated static build metadata updated by stampver.
+export const VERSION = "{ctx.semver or ctx.date_str}";
+export const COMMIT = "{ctx.commit_hash}";
+export const DATE = "{ctx.date_str}";
+export const FULL_VERSION = "{ctx.full_version}";
+export const BUILD_HASH = "{ctx.build_hash}";
+"""
+    for ts_path in ts_info_paths:
+        if os.path.exists(ts_path):
+            _write_if_changed(ts_path, ts_info_content, updated_files)
+
     # 7. Update HTML meta tags
     html_paths = [os.path.join(root_dir, "index.html")]
     for root, _, files in os.walk(root_dir):

@@ -38,6 +38,20 @@ def test_stamp_workspace(tmp_path):
     assert "buildHash" in updated_pkg
 
 
+def test_ts_version_stamping(tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    ts_file = src_dir / "version.ts"
+    ts_file.write_text("// dummy", encoding="utf-8")
+
+    res = stamp_workspace(str(tmp_path), bump="patch")
+    assert "src/version.ts" in [f.replace("\\", "/") for f in res.updated_files]
+    content = ts_file.read_text(encoding="utf-8")
+    assert "export const VERSION" in content
+    assert "export const BUILD_HASH" in content
+
+
+
 def test_cli_version(capsys):
     import sys
     from unittest.mock import patch
