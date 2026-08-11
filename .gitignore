@@ -1,0 +1,36 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tooling & Test caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.coverage.*
+coverage.xml
+
+# Build and Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.whl
+
+# Rust build artifacts
+target/
+**/target/
+
+# OS and Editor metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
