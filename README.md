@@ -1,6 +1,6 @@
 # `stampver`
 
-Universal date-first versioning and build stamping CLI tool designed for AI agents, developers, and Git pre-commit hooks.
+Universal versioning and build stamping CLI tool designed for AI agents, developers, and Git pre-commit hooks.
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -10,11 +10,43 @@ Universal date-first versioning and build stamping CLI tool designed for AI agen
 
 ## ⚡ Features
 
-- ⏱️ **Date-Always Policy**: Version string always includes UTC timestamp (`2026.08.11-2057`). SemVer (`1.12.3`) is preserved and bumped if present (`v1.12.3-2026.08.11-2057`).
-- 🔍 **Zero-Config Auto-Detector**: Automatically detects and updates `pyproject.toml`, `package.json`, `manifest.json`, `Cargo.toml`, `build_info.py`, `index.html` (`meta[name="version"]`), `build.gradle.kts`, and `version.txt`.
-- 🔐 **64-Character Cryptographic Build Hash**: Computes SHA-256 HMAC hash of `Version + Date + Git Commit + Salt`.
-- 🪝 **Pre-Commit Framework Integration**: Native `.pre-commit-hooks.yaml` support for official pre-commit workflow.
-- 🤖 **AI Agent JSON Support**: `--json` outputs machine-parseable JSON payloads for automated pipelines.
+- 🎛️ **Config-Driven Formats**: per-repo `stampver.toml` chooses `semver` (`v1.2.3-2026.08.11-2057`), `semverrun` (CI run suffix), or `date` (`2026.08.11-2057`). Auto-detect remains the default.
+- ⏱️ **Date Always**: timestamp is always included in full versions.
+- 🔍 **Auto-Detector + Explicit Targets**: discovers `pyproject.toml`, `package.json`, `manifest.json`, `Cargo.toml`, `build_info.py`, `index.html` (`meta[name="version"]`, `?v=` cache busting), `build.gradle.kts`, `version.txt` — or takes explicit targets from config.
+- 🔐 **64-Character Cryptographic Build Hash**: SHA-256 HMAC of `Version + Date + Git Commit + Salt`.
+- 🪝 **Pre-Commit Framework Integration**: native `.pre-commit-hooks.yaml` support.
+- 🤖 **AI Agent JSON Support**: `--json` outputs machine-parseable payloads.
+- 🧬 **Legacy Templates**: `version.py` / `version.js` consumer templates (`VERSION`/`COMMIT_HASH`/`BUILD_DATE`/`FULL_VERSION`, `window.*`) for existing apps.
+
+## 🎛️ Configuration (`stampver.toml`)
+
+Place in the repository root to control the format and extra targets:
+
+```toml
+format = "semver"              # semver | semverrun | date (default: auto-detect)
+salt = ""                      # HMAC salt for build hash
+version_txt = "version.txt"    # false/omit-specific path; null to disable
+pyproject = true               # default: true (date repos opt-in via toml)
+build_info = ["server/build_info.py"]        # build_info.py template targets
+version_py = ["app/version.py"]              # legacy version.py template targets
+version_js = ["app/static/tma/version.js"]   # window.* module targets
+version_ts = ["src/version.ts"]              # TypeScript targets
+html_meta = ["UI/index.html"]                # <meta name="version"> targets
+html_cache_bust = ["app/static/tma/index.html"]  # asset ?v= cache busting
+cache_bust_regex = '(\.(?:css|js)\?v=)[^"\'\s>]+'  # override default regex
+```
+
+### Formats
+
+| Format | Base in `version.txt` | Full version | Used by |
+|---|---|---|---|
+| `semver` | `0.18.0` | `v0.18.0-2026.08.26-1454` | GyroMouse, led_sync |
+| `semverrun` | `0.18.0` | `v0.18.0-2026.08.26-1454-42` (run via `BUILD_RUN_NUMBER`) | GyroMouse CI |
+| `date` | `2026.08.26-1454` | `2026.08.26-1454` | tg-gatekeeper, AWS_Project |
+
+### Environment overrides (CI)
+
+`BUILD_FULL_VERSION` > computed full version; `BUILD_TIMESTAMP` (`YYYY.MM.DD-HHMM`) > date; `BUILD_VERSION_BASE` > semver base; `BUILD_RUN_NUMBER` > appended in `semverrun` mode.
 
 ---
 
@@ -24,12 +56,17 @@ Universal date-first versioning and build stamping CLI tool designed for AI agen
 
 Using `pip`:
 ```bash
-pip install git+https://github.com/KaMeLoTmArMoT/stampver.git
+pip install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0
 ```
 
 Using `uv` as a global tool:
 ```bash
-uv tool install git+https://github.com/KaMeLoTmArMoT/stampver.git
+uv tool install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0
+```
+
+Using `uv` ad-hoc in CI:
+```bash
+uvx --from git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0 stampver stamp
 ```
 
 ### Option 2: Manual Git Build & Local Install
@@ -57,9 +94,10 @@ Add `stampver` to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/KaMeLoTmArMoT/stampver
-    rev: main  # or target release tag
+    rev: v0.2.0
     hooks:
       - id: stampver
+        args: [--stage]
 ```
 
 ### Or Install Native Git Hook (Zero External Dependencies)
@@ -99,3 +137,30 @@ stampver stamp --dry-run
 # Stamp and bump SemVer (patch, minor, or major):
 stampver stamp --bump patch --stage
 ```
+
+### Inspect Resolved Version
+```bash
+stampver info --json
+```
+
+---
+
+## Project layout
+
+```text
+stampver/
+├── config.py    # stampver.toml loading (StampverConfig)
+├── core.py      # version math: contexts, detection, hashing
+├── engine.py    # target discovery + stamp_workspace orchestration
+├── writers.py   # per-artifact writers (one class per template)
+├── cli.py       # argparse interface (info / stamp / hook-install)
+└── hooks.py     # git pre-commit hook installer
+```
+
+---
+
+
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.

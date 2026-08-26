@@ -4,7 +4,9 @@ import os
 import sys
 
 from stampver import __version__
-from stampver.core import resolve_context, stamp_workspace
+from stampver.config import StampverConfig
+from stampver.core import resolve_context
+from stampver.engine import stamp_workspace
 from stampver.hooks import install_pre_commit_hook
 
 
@@ -22,7 +24,6 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
-    # Command: stamp
     stamp_parser = subparsers.add_parser(
         "stamp", help="Detect and stamp version across project files"
     )
@@ -60,7 +61,6 @@ def main():
         help="Output structured JSON payload (ideal for AI agents)",
     )
 
-    # Command: info
     info_parser = subparsers.add_parser(
         "info", help="Print current resolved version and build metadata"
     )
@@ -81,7 +81,6 @@ def main():
         help="Output structured JSON payload",
     )
 
-    # Command: hook-install
     hook_parser = subparsers.add_parser(
         "hook-install", help="Install git pre-commit hook in target directory"
     )
@@ -94,16 +93,20 @@ def main():
     args = parser.parse_args()
 
     if not args.command:
-        # Default action if no subcommand is passed: run 'info'
         args.command = "info"
         args.dir = "."
         args.salt = ""
         args.json_output = False
 
     target_dir = os.path.abspath(getattr(args, "dir", "."))
+    config = StampverConfig.load(target_dir)
 
     if args.command == "info":
-        ctx = resolve_context(target_dir, salt=args.salt)
+        ctx = resolve_context(
+            target_dir,
+            format_key=config.format,
+            salt=config.salt if not args.salt else args.salt,
+        )
         data = {
             "full_version": ctx.full_version,
             "semver": ctx.semver,
@@ -112,7 +115,7 @@ def main():
             "commit_hash": ctx.commit_hash,
             "build_hash": ctx.build_hash,
         }
-        if getattr(args, "json_output", False):
+        if args.json_output:
             print(json.dumps(data, indent=2))
         else:
             print("=======================================")
@@ -127,6 +130,7 @@ def main():
         dry_run = getattr(args, "dry_run", False)
         result = stamp_workspace(
             root_dir=target_dir,
+            config=config,
             bump=args.bump,
             salt=args.salt,
             stage=args.stage,
@@ -146,7 +150,7 @@ def main():
             "errors": result.errors,
         }
 
-        if getattr(args, "json_output", False):
+        if args.json_output:
             print(json.dumps(data, indent=2))
         else:
             prefix = "[stampver] [DRY RUN]" if dry_run else "[stampver]"
@@ -175,4 +179,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

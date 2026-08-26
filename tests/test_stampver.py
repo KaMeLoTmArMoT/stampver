@@ -1,6 +1,14 @@
 import json
 
-from stampver.core import bump_semver, generate_build_hash, resolve_context, stamp_workspace
+from stampver.config import StampverConfig
+from stampver.core import (
+    bump_semver,
+    detect_semver,
+    generate_build_hash,
+    looks_like_date,
+    resolve_context,
+)
+from stampver.engine import stamp_workspace
 from stampver.hooks import install_pre_commit_hook
 
 
@@ -19,6 +27,26 @@ def test_generate_build_hash():
     assert h1 != h3
 
 
+def test_looks_like_date():
+    assert looks_like_date("2026.08.26-1454") is True
+    assert looks_like_date("2026.08.26") is True
+    assert looks_like_date("0.18.0") is False
+    assert looks_like_date("1.2.3") is False
+
+
+def test_date_not_detected_as_semver(tmp_path):
+    (tmp_path / "version.txt").write_text("2026.08.26-1454\n", encoding="utf-8")
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "date-proj"\nversion = "2026.08.26-1454"\n', encoding="utf-8"
+    )
+    assert detect_semver(str(tmp_path)) is None
+    ctx = resolve_context(str(tmp_path))
+    assert ctx.semver is None
+    assert ctx.full_version == ctx.date_str
+    assert "-2026." not in ctx.full_version
+
+
 def test_resolve_context(tmp_path):
     (tmp_path / "version.txt").write_text("0.17.0\n", encoding="utf-8")
     ctx = resolve_context(str(tmp_path))
@@ -26,6 +54,65 @@ def test_resolve_context(tmp_path):
     assert "0.17.0" in ctx.full_version
     # Calver code should fit in 32-bit int
     assert int(ctx.calver_code) < 2147483647
+
+
+def test_env_override_full_version(tmp_path):
+    (tmp_path / "version.txt").write_text("0.18.0\n", encoding="utf-8")
+    env = {
+        "BUILD_FULL_VERSION": "v0.18.0-2026.08.26-1454-123",
+        "BUILD_TIMESTAMP": "2026.08.26-1454",
+    }
+    ctx = resolve_context(str(tmp_path), env=env)
+    assert ctx.full_version == "v0.18.0-2026.08.26-1454-123"
+    assert ctx.date_str == "2026.08.26-1454"
+    assert int(ctx.calver_code) == 2026082614
+
+
+def test_semverrun_format(tmp_path):
+    import os
+
+    (tmp_path / "version.txt").write_text("0.18.0\n", encoding="utf-8")
+    from contextlib import suppress
+
+    os.environ["BUILD_RUN_NUMBER"] = "42"
+    try:
+        ctx = resolve_context(str(tmp_path), format_key="semverrun", env=os.environ)
+        assert ctx.full_version.endswith("-42")
+    finally:
+        with suppress(KeyError):
+            del os.environ["BUILD_RUN_NUMBER"]
+
+
+def test_legacy_version_py_writer(tmp_path):
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    cfg = StampverConfig(version_py=["app/version.py"])
+    stamp_workspace(str(tmp_path), config=cfg)
+    content = (tmp_path / "app" / "version.py").read_text(encoding="utf-8")
+    assert 'VERSION = "0.1.0"' in content
+    assert 'COMMIT_HASH = "unknown"' in content
+    assert "BUILD_DATE" in content
+    assert '__all__ = ["VERSION", "COMMIT_HASH", "BUILD_DATE", "FULL_VERSION"]' in content
+
+
+def test_version_js_writer(tmp_path):
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    cfg = StampverConfig(version_js=["app/static/version.js"])
+    stamp_workspace(str(tmp_path), config=cfg)
+    content = (tmp_path / "app" / "static" / "version.js").read_text(encoding="utf-8")
+    assert 'window.APP_VERSION = "0.1.0";' in content
+    assert "window.COMMIT_HASH" in content
+    assert "window.FULL_VERSION" in content
+
+
+def test_html_cache_bust(tmp_path):
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    index = tmp_path / "tma" / "index.html"
+    index.parent.mkdir()
+    index.write_text('<link href="app.js?v=1.2.3">', encoding="utf-8")
+    cfg = StampverConfig(html_cache_bust=["tma/index.html"])
+    stamp_workspace(str(tmp_path), config=cfg)
+    updated = (tmp_path / "tma" / "index.html").read_text(encoding="utf-8")
+    assert "app.js?v=0.1.0" in updated
 
 
 def test_stamp_workspace(tmp_path):
@@ -82,6 +169,34 @@ version = "0.5.0"
     assert 'version = "0.5.1"' in new_text
 
 
+def test_date_format_stamps_pyproject(tmp_path):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "date-proj"\nversion = "2026.01.01-0000"\n', encoding="utf-8"
+    )
+    cfg = StampverConfig(format="date", pyproject=True)
+    res = stamp_workspace(str(tmp_path), config=cfg)
+    new_text = pyproject.read_text(encoding="utf-8")
+    assert res.context.full_version == res.context.date_str
+    assert f'version = "{res.context.date_str}"' in new_text
+
+
+def test_config_loading(tmp_path):
+    tmp_path.joinpath("stampver.toml").write_text("[format]\n", encoding="utf-8") if False else None
+    (tmp_path / "stampver.toml").write_text(
+        'format = "date"\n'
+        'version_py = ["app/version.py"]\n'
+        'version_js = ["app/static/version.js"]\n'
+        'html_cache_bust = ["app/static/index.html"]\n',
+        encoding="utf-8",
+    )
+    cfg = StampverConfig.load(str(tmp_path))
+    assert cfg.format == "date"
+    assert cfg.version_py == ["app/version.py"]
+    assert cfg.version_js == ["app/static/version.js"]
+    assert cfg.html_cache_bust == ["app/static/index.html"]
+
+
 def test_dry_run(tmp_path):
     pkg_json = tmp_path / "package.json"
     pkg_json.write_text(json.dumps({"name": "dry-pkg", "version": "1.0.0"}), encoding="utf-8")
@@ -131,4 +246,3 @@ def test_cli_version(capsys):
             assert e.code == 0
     captured = capsys.readouterr()
     assert __version__ in captured.out or __version__ in captured.err
-

@@ -1,0 +1,2 @@
+# stampver repository configuration (dogfooding)
+format = "semver"
