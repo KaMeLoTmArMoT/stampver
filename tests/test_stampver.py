@@ -8,7 +8,7 @@ from stampver.core import (
     looks_like_date,
     resolve_context,
 )
-from stampver.engine import stamp_workspace
+from stampver.engine import consistency_issues, stamp_workspace
 from stampver.hooks import install_pre_commit_hook
 
 
@@ -230,6 +230,69 @@ def test_python_init_stamping(tmp_path):
     res = stamp_workspace(str(tmp_path), bump="minor")
     assert res.context.semver == "0.2.0"
     assert '__version__ = "0.2.0"' in init_file.read_text(encoding="utf-8")
+
+
+def test_consistency_check_consistent(tmp_path):
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    assert consistency_issues(str(tmp_path)) == []
+
+
+def test_consistency_check_detects_drift(tmp_path):
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "0.2.0"\n', encoding="utf-8"
+    )
+    issues = consistency_issues(str(tmp_path))
+    assert len(issues) == 1
+    assert "pyproject.toml" in issues[0]
+
+
+def test_consistency_check_ignores_dates(tmp_path):
+    (tmp_path / "version.txt").write_text("2026.08.26-1454\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "2026.08.26-1454"\n', encoding="utf-8"
+    )
+    assert consistency_issues(str(tmp_path)) == []
+
+
+def test_consistency_check_manifest(tmp_path):
+    (tmp_path / "version.txt").write_text("1.0.0\n", encoding="utf-8")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"version": "1.0.0", "version_name": "v1.0.0-2026.08.26-1454"}),
+        encoding="utf-8",
+    )
+    assert consistency_issues(str(tmp_path)) == []
+
+
+def test_cli_check_exit_code(tmp_path, capsys):
+    import sys
+    from unittest.mock import patch
+
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+
+    from stampver.cli import main
+
+    with patch.object(sys, "argv", ["stampver", "check", "--dir", str(tmp_path)]):
+        try:
+            main()
+        except SystemExit as e:
+            assert e.code == 0
+    assert "consistent" in capsys.readouterr().out
+
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "0.9.9"\n', encoding="utf-8"
+    )
+    with patch.object(sys, "argv", ["stampver", "check", "--dir", str(tmp_path)]):
+        try:
+            main()
+        except SystemExit as e:
+            assert e.code == 1
 
 
 def test_cli_version(capsys):

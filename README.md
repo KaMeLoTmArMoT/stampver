@@ -143,6 +143,13 @@ stampver stamp --bump patch --stage
 stampver info --json
 ```
 
+### CI Drift Gate (base consistency)
+```bash
+stampver check            # exit 1 on any base-version drift across files
+stampver check --json
+```
+Compares stable bases only (`version.txt`, `pyproject.toml`, `package.json`, `manifest.json`, `Cargo.toml`, `__init__.py __version__`); date-bearing build artifacts are ignored, so it is safe in CI after every commit.
+
 ---
 
 ## Project layout

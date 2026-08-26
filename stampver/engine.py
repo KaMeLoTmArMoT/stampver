@@ -1,12 +1,14 @@
 """Stamping engine: discovers targets, renders writers, writes diff-aware."""
 
+import json
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 
 from stampver.config import StampverConfig
-from stampver.core import VersionContext, resolve_context
+from stampver.core import VersionContext, looks_like_date, resolve_context
 from stampver.writers import (
     BuildInfoPyWriter,
     CargoWriter,
@@ -175,6 +177,67 @@ def collect_writers(root_dir: str, config: StampverConfig, ctx: VersionContext) 
                 writers.append(GradleWriter(g_path))
 
     return writers
+
+
+def consistency_issues(root_dir: str) -> list[str]:
+    """Verify base version consistency across declaration files (drift gate).
+
+    Date-bearing files (build_info DATE/FULL_VERSION, manifest version_name) are
+    intentionally ignored - only the stable base version is compared.
+    """
+    issues: list[str] = []
+    declared: tuple[str, str] | None = None
+
+    def register(source: str, value: str | None) -> None:
+        nonlocal declared
+        if value is None or looks_like_date(value):
+            return
+        if declared is None:
+            declared = (source, value)
+        elif value != declared[1]:
+            issues.append(f"{source}: {value!r} != {declared[0]}: {declared[1]!r}")
+
+    txt_path = os.path.join(root_dir, "version.txt")
+    if os.path.isfile(txt_path):
+        line = read_file(txt_path).strip()
+        register("version.txt", line)
+
+    pyproject_path = os.path.join(root_dir, "pyproject.toml")
+    if os.path.isfile(pyproject_path):
+        m = re.search(r"\[project\][\s\S]*?(?=\n\[|\Z)", read_file(pyproject_path))
+        if m:
+            vm = re.search(r'^\s*version\s*=\s*"([^"]+)"', m.group(0), flags=re.MULTILINE)
+            if vm:
+                register("pyproject.toml", vm.group(1))
+
+    for name in (
+        "package.json",
+        "manifest.json",
+        os.path.join("chrome_extension", "manifest.json"),
+    ):
+        path = os.path.join(root_dir, name)
+        if os.path.isfile(path):
+            try:
+                data = json.loads(read_file(path))
+                if isinstance(data.get("version"), str):
+                    register(name, data["version"])
+            except (OSError, ValueError):
+                pass
+
+    cargo_path = os.path.join(root_dir, "Cargo.toml")
+    if os.path.isfile(cargo_path):
+        cm = re.search(r'\[package\][\s\S]*?\bversion\s*=\s*"([^"]+)"', read_file(cargo_path))
+        if cm:
+            register("Cargo.toml", cm.group(1))
+
+    if declared:
+        for init_path in iter_files(root_dir, "__init__.py"):
+            if has_assigned_init_version(init_path):
+                im = re.search(r'__version__\s*=\s*"([^"]+)"', read_file(init_path))
+                if im:
+                    register(init_path, im.group(1))
+
+    return issues
 
 
 def stamp_workspace(

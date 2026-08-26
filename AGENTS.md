@@ -7,7 +7,7 @@
 | Task | Command |
 |---|---|
 | Install (editable) | `pip install -e .` |
-| Run CLI | `stampver --help` / `stampver stamp [--dry-run] [--json]` |
+| Run CLI | `stampver --help` / `stampver stamp [--dry-run] [--json]` / `stampver check [--json]` |
 | Run tests | `pytest` |
 | Lint check & fix | `ruff check --fix` |
 | Format | `ruff format` |

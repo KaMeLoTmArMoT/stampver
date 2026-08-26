@@ -6,7 +6,7 @@ import sys
 from stampver import __version__
 from stampver.config import StampverConfig
 from stampver.core import resolve_context
-from stampver.engine import stamp_workspace
+from stampver.engine import consistency_issues, stamp_workspace
 from stampver.hooks import install_pre_commit_hook
 
 
@@ -90,6 +90,22 @@ def main():
         help="Target git project root directory (default: current directory)",
     )
 
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Verify base version consistency across declaration files (drift gate)",
+    )
+    check_parser.add_argument(
+        "--dir",
+        default=".",
+        help="Target project root directory (default: current directory)",
+    )
+    check_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output structured JSON payload",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -125,6 +141,18 @@ def main():
             print(f" Git Commit   : {ctx.commit_hash}")
             print(f" Build Hash   : {ctx.build_hash}")
             print("=======================================")
+
+    elif args.command == "check":
+        issues = consistency_issues(target_dir)
+        if args.json_output:
+            print(json.dumps({"consistent": not issues, "issues": issues}, indent=2))
+        elif issues:
+            for issue in issues:
+                print(f"[stampver] Version drift: {issue}", file=sys.stderr)
+            print("[stampver] Version files are inconsistent.", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print("[stampver] Version files are consistent.")
 
     elif args.command == "stamp":
         dry_run = getattr(args, "dry_run", False)
