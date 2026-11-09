@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stampver"
-version = "0.2.1"
+version = "0.2.2"
 description = "Universal date-first versioning and build stamping CLI tool"
 readme = "README.md"
 requires-python = ">=3.11"

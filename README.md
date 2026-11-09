@@ -56,17 +56,17 @@ cache_bust_regex = '(\.(?:css|js)\?v=)[^"\'\s>]+'  # override default regex
 
 Using `pip`:
 ```bash
-pip install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0
+pip install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.2
 ```
 
 Using `uv` as a global tool:
 ```bash
-uv tool install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0
+uv tool install git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.2
 ```
 
 Using `uv` ad-hoc in CI:
 ```bash
-uvx --from git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.0 stampver stamp
+uvx --from git+https://github.com/KaMeLoTmArMoT/stampver.git@v0.2.2 stampver stamp
 ```
 
 ### Option 2: Manual Git Build & Local Install
@@ -94,7 +94,7 @@ Add `stampver` to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/KaMeLoTmArMoT/stampver
-    rev: v0.2.1
+    rev: v0.2.2
     hooks:
       # Stamp & stage automatically when code changes are staged
       - id: stampver
