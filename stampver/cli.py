@@ -43,6 +43,18 @@ def main():
         help="Automatically 'git add' updated files",
     )
     stamp_parser.add_argument(
+        "--only-if-staged",
+        action="store_true",
+        dest="only_if_staged",
+        help="Only stamp if staged changes exist, --bump is set, or version drift is detected",
+    )
+    stamp_parser.add_argument(
+        "--force",
+        action="store_true",
+        dest="force",
+        help="Force stamping even if git working tree or index is clean",
+    )
+    stamp_parser.add_argument(
         "-n",
         "--dry-run",
         action="store_true",
@@ -156,6 +168,8 @@ def main():
 
     elif args.command == "stamp":
         dry_run = getattr(args, "dry_run", False)
+        only_if_staged = getattr(args, "only_if_staged", False)
+        force = getattr(args, "force", False)
         result = stamp_workspace(
             root_dir=target_dir,
             config=config,
@@ -163,7 +177,26 @@ def main():
             salt=args.salt,
             stage=args.stage,
             dry_run=dry_run,
+            only_if_staged=only_if_staged,
+            force=force,
         )
+
+        if result.skipped:
+            if args.json_output:
+                print(
+                    json.dumps(
+                        {
+                            "status": "skipped",
+                            "reason": result.skip_reason,
+                            "full_version": result.context.full_version,
+                            "semver": result.context.semver,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                print(f"[stampver] {result.skip_reason}")
+            return
 
         data = {
             "status": "success" if not result.errors else "partial_success",

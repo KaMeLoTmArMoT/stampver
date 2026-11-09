@@ -47,6 +47,63 @@ class StampResult:
     updated_files: list[str] = field(default_factory=list)
     staged_files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    skipped: bool = False
+    skip_reason: str = ""
+
+
+def is_git_repo(root_dir: str) -> bool:
+    """Return True if root_dir is inside a git working tree."""
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=root_dir,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return res.returncode == 0 and res.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def get_git_staged_files(root_dir: str) -> list[str]:
+    """Return relative paths of files staged in the git index."""
+    try:
+        res = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=root_dir,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            return [
+                line.strip().replace("\\", "/") for line in res.stdout.splitlines() if line.strip()
+            ]
+    except Exception:
+        pass
+    return []
+
+
+def get_git_dirty_files(root_dir: str) -> list[str]:
+    """Return relative paths of modified/added/untracked files in the git workspace."""
+    try:
+        res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root_dir,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            files = []
+            for line in res.stdout.splitlines():
+                if len(line) > 3:
+                    files.append(line[3:].strip().replace("\\", "/"))
+            return files
+    except Exception:
+        pass
+    return []
 
 
 def collect_writers(root_dir: str, config: StampverConfig, ctx: VersionContext) -> list[Writer]:
@@ -247,10 +304,48 @@ def stamp_workspace(
     salt: str = "",
     stage: bool = False,
     dry_run: bool = False,
+    only_if_staged: bool = False,
+    force: bool = False,
 ) -> StampResult:
     config = config or StampverConfig.load(root_dir)
     effective_salt = salt if salt else config.salt
     ctx = resolve_context(root_dir, format_key=config.format, bump=bump, salt=effective_salt)
+
+    # Smart conditional stamping: Avoid dirtying working tree / failing CI when nothing changed
+    if not force:
+        if only_if_staged and not is_git_repo(root_dir) and not bump:
+            return StampResult(
+                context=ctx,
+                skipped=True,
+                skip_reason="Not a git repository; skipping timestamp update.",
+            )
+
+        if is_git_repo(root_dir):
+            writers = collect_writers(root_dir, config, ctx)
+            target_rel_paths = {
+                os.path.relpath(w.path, root_dir).replace("\\", "/") for w in writers
+            }
+            issues = consistency_issues(root_dir)
+
+            if only_if_staged or stage:
+                staged = get_git_staged_files(root_dir)
+                has_real_staged = any(f for f in staged if f not in target_rel_paths)
+                if not bump and not issues and not has_real_staged:
+                    return StampResult(
+                        context=ctx,
+                        skipped=True,
+                        skip_reason="Clean git index; skipping timestamp update.",
+                    )
+            else:
+                dirty = get_git_dirty_files(root_dir)
+                has_real_changes = any(f for f in dirty if f not in target_rel_paths)
+                if not bump and not issues and not has_real_changes:
+                    return StampResult(
+                        context=ctx,
+                        skipped=True,
+                        skip_reason="Clean git repository; skipping timestamp update.",
+                    )
+
     updated_files: list[str] = []
     errors: list[str] = []
 

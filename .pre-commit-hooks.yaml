@@ -1,6 +1,13 @@
 - id: stampver
-  name: stampver
+  name: stampver (stamp & stage)
   description: Universal date-first versioning and build stamping CLI tool
   entry: stampver stamp --stage
+  language: python
+  pass_filenames: false
+
+- id: stampver-check
+  name: stampver (check drift only)
+  description: Non-modifying version consistency check (safe for CI)
+  entry: stampver check
   language: python
   pass_filenames: false

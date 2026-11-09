@@ -309,3 +309,96 @@ def test_cli_version(capsys):
             assert e.code == 0
     captured = capsys.readouterr()
     assert __version__ in captured.out or __version__ in captured.err
+
+
+def test_pre_commit_hooks_yaml():
+    import yaml
+
+    with open(".pre-commit-hooks.yaml", encoding="utf-8") as f:
+        hooks = yaml.safe_load(f)
+    hook_ids = {h["id"]: h for h in hooks}
+    assert "stampver" in hook_ids
+    assert "stampver-check" in hook_ids
+    assert hook_ids["stampver-check"]["entry"] == "stampver check"
+    assert hook_ids["stampver"]["entry"] == "stampver stamp --stage"
+
+
+def test_smart_stamp_skips_when_git_clean(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("print(1)\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # 1. Clean git index: stamp_workspace with stage=True should skip
+    res = stamp_workspace(str(tmp_path), stage=True)
+    assert res.skipped is True
+    assert "Clean git index" in res.skip_reason
+    assert res.updated_files == []
+
+    # 2. Stage real code change with build_info: stamp_workspace should stamp and stage
+    (tmp_path / "build_info.py").write_text("# initial\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("print(2)\n", encoding="utf-8")
+    subprocess.run(["git", "add", "app.py", "build_info.py"], cwd=tmp_path, check=True)
+    res2 = stamp_workspace(str(tmp_path), stage=True)
+    assert res2.skipped is False
+    assert "build_info.py" in res2.updated_files
+    assert "build_info.py" in res2.staged_files
+
+    # 3. Explicit bump overrides clean git check
+    subprocess.run(["git", "commit", "-m", "update"], cwd=tmp_path, check=True)
+    res3 = stamp_workspace(str(tmp_path), stage=True, bump="minor")
+    assert res3.skipped is False
+    assert res3.context.semver == "0.2.0"
+    assert "version.txt" in res3.updated_files
+
+
+def test_smart_stamp_detects_drift_even_when_clean(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "p"\nversion = "0.2.0"\n', encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Drift exists -> should not skip, should stamp
+    res = stamp_workspace(str(tmp_path), stage=True)
+    assert res.skipped is False
+    assert len(res.updated_files) > 0
+
+
+def test_cli_stamp_only_if_staged_json(tmp_path, capsys):
+    import subprocess
+    import sys
+    from unittest.mock import patch
+
+    from stampver.cli import main
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+
+    (tmp_path / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    with patch.object(
+        sys,
+        "argv",
+        ["stampver", "stamp", "--dir", str(tmp_path), "--only-if-staged", "--json"],
+    ):
+        main()
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "skipped"
+    assert "Clean git index" in out["reason"]

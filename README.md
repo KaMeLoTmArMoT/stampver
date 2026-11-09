@@ -94,10 +94,12 @@ Add `stampver` to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/KaMeLoTmArMoT/stampver
-    rev: v0.2.0
+    rev: v0.2.1
     hooks:
+      # Stamp & stage automatically when code changes are staged
       - id: stampver
-        args: [--stage]
+      # Or for non-modifying version consistency checks in CI:
+      # - id: stampver-check
 ```
 
 ### Or Install Native Git Hook (Zero External Dependencies)
